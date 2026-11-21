@@ -1,5 +1,14 @@
 # Implementation Log
 
+## GM-004 — Explicit timed processing feedback
+
+- Files touched: `index.html`, `src/app.js`, `src/styles.css`, and browser tests.
+- Changes: added a contextual in-preview processing panel that preserves visual context; elapsed timer; delayed media-loading feedback; GIF frame decode progress; high-detail preview feedback; deterministic export pause explanation; frame count, percentage, ETA, recording progress, and visible cancel action.
+- Behavior: quick operations avoid flashing via delayed presentation; once shown, feedback remains visible for at least 400 ms. Video playback is explicitly described as paused during deterministic frame extraction and is restored afterward.
+- Verification: `npm run verify` passed with 5 unit tests and 17 browser checks (three duplicate mobile batches skipped). A deliberately hidden processing panel caused the timed-feedback check to fail before restoration.
+- Deployment: GitHub Actions run 44961063865 succeeded. Live desktop and mobile checks returned HTTP 200, displayed “Updating preview,” completed and hid the indicator, had no overflow, and produced no console errors.
+- Self-check: complete, pushed, deployed, and production-ready.
+
 ## GM-003 — Adaptive presets, favicon, and release readiness
 
 - Files touched: `favicon.svg`, `index.html`, `README.md`, `src/app.js`, `src/styles.css`, and browser tests.

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-21 session 4
+
+- Added contextual loading and processing feedback with elapsed time.
+- Added GIF decode progress and measurable export frame percentage/ETA.
+- Explicitly explains export-related playback pauses and offers visible safe cancellation.
+- Added high-detail preview feedback while keeping the current preview visible.
+- Verified locally and on the deployed desktop/mobile site.
+
 ## 2026-11-21 session 3
 
 - Added a branded SVG favicon and minimal README introduction with immediate live URL.
