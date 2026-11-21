@@ -2,6 +2,8 @@
 
 Turn videos, GIFs, and images into animated ASCII, dither, halftone, tile, and pixel art directly in your browser. Media stays on your device.
 
+**Live:** https://ahmed-sleem.github.io/glyphmix/
+
 ## Run locally
 
 ```bash
