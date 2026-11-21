@@ -1,0 +1,154 @@
+// Browser editor orchestration: media loading, controls, history, playback, and exports.
+import { clamp, dims, draw, RAMPS, PALS } from './render-core.js';
+import coreSource from './render-core.js?raw';
+import { decompressFrames, parseGIF } from 'gifuct-js';
+const $=id=>document.getElementById(id);
+const S={style:'ascii',cs:'standard',custom:'',cm:'palette',pal:'Mono',bg:'#000000',st:PALS.Mono.st,ink:1,gm:1,lo:0,hi:1,cell:8,ar:1.8,gap:1,hs:1,alg:'bayer4',lv:2,
+ cols:120,asp:'source',fit:'cover',zoom:1,px:0,py:0,rot:0,flip:0,bri:0,con:0,sat:0,inv:0,edge:0,smooth:0,key:'off',tol:40,keyc:null,nf:48,fps:12,a:0,b:1,pp:0,cov:0,transparent:0};
+const CT=[
+['Source','asp','Aspect ratio','s',['source','16:9','4:3','1:1','9:16','21:9']],['Source','fit','Fit','s',['cover','contain','stretch']],
+['Source','zoom','Zoom','r',.5,4,.01],['Source','px','Pan X','r',-1,1,.01],['Source','py','Pan Y','r',-1,1,.01],['Source','rot','Rotate °','s',[0,90,180,270]],['Source','flip','Mirror','c'],
+['Grid','cols','Columns (resolution)','r',16,400,1],['Grid','cell','Cell size (px)','r',2,24,1],['Grid','ar','Cell aspect (h/w)','r',.5,2.4,.05],
+['Tone','bri','Brightness','r',-100,100,1],['Tone','con','Contrast','r',-100,100,1],['Tone','sat','Saturation','r',-100,100,1],['Tone','inv','Invert source','c'],['Tone','edge','Edge detect mix','r',0,1,.05],['Tone','smooth','Temporal smoothing','r',0,.9,.05],
+['Remove background','key','Mode','s',['off','color key','remove dark','remove bright']],['Remove background','tol','Tolerance','r',0,100,1],
+['Style','style','Render style','s',['ascii','tiles','dither','halftone','blocks']],['Style','cs','Characters','s',[...Object.keys(RAMPS),'custom']],['Style','custom','Custom characters (sparse → dense)','t'],
+['Style','cm','Color mode','s',['palette','source','koi']],['Style','pal','Palette','s',Object.keys(PALS)],['Style','bg','Background','k'],['Style','ink','Bright = dense','c'],
+['Style','gm','Density gamma','r',.3,3,.05],['Style','lo','Black point','r',0,.9,.01],['Style','hi','White point','r',.1,1,.01],
+['Style','gap','Tile / block gap (px)','r',0,6,.5],['Style','hs','Halftone dot size','r',.4,1.6,.05],['Style','alg','Dither algorithm','s',['bayer2','bayer4','bayer8','floyd','atkinson','threshold','noise']],['Style','lv','Dither levels','r',2,8,1],
+['Export','nf','Frames to process','r',8,240,1],['Export','fps','Playback FPS','r',4,30,1],['Export','a','Clip start','r',0,1,.01],['Export','b','Clip end','r',0,1,.01],['Export','pp','Ping-pong loop','c'],['Export','cov','Fullscreen cover (export)','c'],['Export','transparent','Transparent background','c']];
+const PR={'Classic ASCII':{style:'ascii',cs:'standard',cm:'palette',pal:'Mono',cols:120,ar:1.8,cell:8,key:'off'},
+'Terminal':{style:'ascii',cs:'dense',cm:'palette',pal:'Terminal',cols:140,ar:1.8,cell:8,key:'off'},
+'Koi tiles':{style:'tiles',cs:'letters',cm:'koi',pal:'Koi',cols:48,ar:1,cell:13,gap:1,key:'color key',tol:40,keyc:null},
+'1-bit dither':{style:'dither',cm:'palette',pal:'Mono',alg:'atkinson',lv:2,cols:300,ar:1,cell:3,con:20,key:'off'},
+'Halftone print':{style:'halftone',cm:'palette',pal:'Paper',cols:90,ar:1,cell:10,hs:1.1,key:'off'},
+'Pixel mosaic':{style:'blocks',cm:'source',pal:'Mono',bg:'#0b0b0c',cols:70,ar:1,cell:12,gap:1,key:'off'},
+'Cyber blocks':{style:'ascii',cs:'blocks',cm:'palette',pal:'Cyber',cols:110,ar:1.6,cell:8,key:'off'},
+'Gameboy':{style:'dither',cm:'palette',pal:'Gameboy',alg:'bayer4',lv:4,cols:160,ar:1,cell:5,key:'off'},
+'Amber CRT':{style:'ascii',cs:'letters',cm:'palette',pal:'Amber',cols:130,ar:1.8,cell:8,key:'off'}};
+const UI=[];let src=null,dirty=1,playing=true,tc=0,lastN=performance.now(),lt=-1,prev=null,curD=null,picking=0,B=null,sourceUrl=null,exportCancelled=false;
+const out=$('out'),octx=out.getContext('2d'),SC=document.createElement('canvas'),sx=SC.getContext('2d',{willReadFrequently:true});
+const stt=m=>$('stt').textContent=m,prog=p=>{const n=Math.round(p*100);$('bar').firstChild.style.width=n+'%';$('bar').setAttribute('aria-valuenow',String(n))};
+function applyPal(n){const p=PALS[n];S.pal=n;S.bg=p.bg;S.st=p.st;S.ink=p.ink}
+function setVals(o){if(o.pal)applyPal(o.pal);Object.assign(S,o);UI.forEach(f=>f());dirty=1;prev=null}
+// ---------- UI ----------
+(function(){const box=$('ctl'),G={};
+ for(const c of CT){if(!G[c[0]]){const d=G[c[0]]=document.createElement('details');d.open=c[0]!=='Export'&&c[0]!=='Remove background';d.innerHTML=`<summary>${c[0]}</summary>`;box.appendChild(d)}
+  const el=document.createElement('label'),k=c[1],t=c[3],isn=typeof S[k]==='number';el.innerHTML=`<span>${c[2]}<b></b></span>`;let i;
+  if(t==='s'){i=document.createElement('select');c[4].forEach(o=>i.add(new Option(o,o)))}else{i=document.createElement('input');i.type={r:'range',c:'checkbox',k:'color',t:'text'}[t];if(t==='r'){i.min=c[4];i.max=c[5];i.step=c[6]}}
+  const sync=()=>{if(t==='c')i.checked=!!S[k];else i.value=S[k];if(t==='r')el.querySelector('b').textContent=(+S[k]).toFixed(c[6]<1?2:0)};
+  i.oninput=()=>{S[k]=t==='c'?+i.checked:isn?+i.value:i.value;if(k==='pal')applyPal(i.value);if(k==='key'&&i.value!=='color key')S.keyc=null;prev=null;dirty=1;if(k==='pal')UI.forEach(f=>f());else sync()};
+  el.appendChild(i);G[c[0]].appendChild(el);UI.push(sync);sync()}
+ const r=document.createElement('div');r.className='row';r.innerHTML='<button id="pk">Pick colour on image</button><button id="au">Auto-detect</button>';G['Remove background'].appendChild(r);
+ $('pk').onclick=()=>{picking=1;out.style.cursor='crosshair';stt('Click the background colour in the preview.')};
+ $('au').onclick=()=>{S.keyc=null;S.key='color key';UI.forEach(f=>f());prev=null;dirty=1};
+ for(const n in PR){const b=document.createElement('button');b.textContent=n;b.onclick=()=>setVals(PR[n]);$('pre').appendChild(b)}})();
+out.onclick=e=>{if(!picking||!curD)return;const r=out.getBoundingClientRect(),[c,rw]=grid(),x=clamp(Math.floor((e.clientX-r.left)/r.width*c),0,c-1),y=clamp(Math.floor((e.clientY-r.top)/r.height*rw),0,rw-1),q=(y*c+x)*4;
+ S.keyc=[curD[q],curD[q+1],curD[q+2]];S.key='color key';picking=0;out.style.cursor='';stt('Key colour set.');UI.forEach(f=>f());prev=null;dirty=1};
+// ---------- sources ----------
+const dc=document.createElement('canvas');dc.width=192;dc.height=108;const dxx=dc.getContext('2d');
+function demoAt(t){const im=dxx.createImageData(192,108),d=im.data,ph=t/6*6.2832;for(let y=0;y<108;y++)for(let x=0;x<192;x++){const u=x/192,v=y/108,p=Math.sin(u*9+ph)+Math.sin(v*7-ph)+Math.sin((u+v)*8+ph)+Math.sin(Math.hypot(u-.5+Math.sin(ph)*.25,v-.5+Math.cos(ph)*.2)*18-2*ph),l=(p+4)/8,o=(y*192+x)*4;d[o]=255*Math.pow(l,1.5);d[o+1]=200*Math.pow(l,2.2)+30*l;d[o+2]=230*(1-l)+30;d[o+3]=255}dxx.putImageData(im,0,0);return dc}
+const demoSrc=()=>({kind:'demo',w:192,h:108,dur:6,get:demoAt,async frame(t){return demoAt(t)}});
+function use(s){disposeSource();if(src&&src.el&&src.el.pause)src.el.pause();src=s;tc=0;prev=null;B=null;S.keyc=null;dirty=1;stt(`${s.w}×${s.h}${s.dur?' · '+s.dur.toFixed(1)+'s':''} loaded.`)}
+async function load(f){try{if(!f||f.size>500*1024*1024)throw Error('Choose a media file smaller than 500 MB.');stt('Loading…');
+ if(/gif/.test(f.type)&&window.ImageDecoder){const d=new ImageDecoder({data:f.stream(),type:f.type});await d.tracks.ready;const n=Math.min(d.tracks.selectedTrack.frameCount,400),fr=[];let tot=0;
+  for(let i=0;i<n;i++){const r=await d.decode({frameIndex:i}),du=(r.image.duration||100000)/1e6;fr.push({bmp:await createImageBitmap(r.image),du});tot+=du;r.image.close()}
+  const get=t=>{t%=tot;let a=0;for(const q of fr){a+=q.du;if(t<a)return q.bmp}return fr[fr.length-1].bmp};
+  use({kind:'gif',frames:fr,w:fr[0].bmp.width,h:fr[0].bmp.height,dur:tot,get,async frame(t){return get(t)}});d.close()}
+ else if(/gif/.test(f.type)){const frames=decompressFrames(parseGIF(await f.arrayBuffer()),true),dc=document.createElement('canvas'),dx=dc.getContext('2d'),built=[];dc.width=frames[0].dims.width;dc.height=frames[0].dims.height;let tot=0;for(const q of frames.slice(0,400)){const patch=new ImageData(new Uint8ClampedArray(q.patch),q.dims.width,q.dims.height);const pc=document.createElement('canvas');pc.width=q.dims.width;pc.height=q.dims.height;pc.getContext('2d').putImageData(patch,0,0);dx.drawImage(pc,q.dims.left,q.dims.top);const bmp=await createImageBitmap(dc),du=Math.max(.02,(q.delay||10)/100);built.push({bmp,du});tot+=du}const get=t=>{t%=tot;let a=0;for(const q of built){a+=q.du;if(t<a)return q.bmp}return built.at(-1).bmp};use({kind:'gif',frames:built,w:dc.width,h:dc.height,dur:tot,get,async frame(t){return get(t)}})}
+ else if(f.type.startsWith('video')){const v=document.createElement('video');v.muted=v.loop=v.playsInline=true;v.crossOrigin='anonymous';sourceUrl=URL.createObjectURL(f);v.src=sourceUrl;
+  await new Promise((ok,no)=>{v.onloadeddata=ok;v.onerror=()=>no(Error('This browser can’t decode that video (codec). Convert it to H.264 MP4 or WebM and retry.'))});
+  if(!v.videoWidth)throw Error('No video track found — codec unsupported. Convert to H.264 MP4 / WebM.');
+  use({kind:'video',el:v,w:v.videoWidth,h:v.videoHeight,dur:v.duration,get:()=>v,frame:t=>new Promise(ok=>{v.onseeked=()=>ok(v);v.currentTime=Math.min(t,v.duration-.02)})});v.play().catch(()=>{})}
+ else if(f.type.startsWith('image')){const im=new Image();sourceUrl=URL.createObjectURL(f);im.src=sourceUrl;await im.decode();use({kind:'img',w:im.naturalWidth,h:im.naturalHeight,dur:0,get:()=>im,async frame(){return im}})}
+ else throw Error('Unsupported file type.');
+ setPlay(true)}catch(e){stt('⚠ '+e.message)}}
+// ---------- sampling (grid + tone + effects) ----------
+const AS={'16:9':16/9,'4:3':4/3,'1:1':1,'9:16':9/16,'21:9':21/9};
+function grid(){const A=S.asp==='source'?(S.rot%180?src.h/src.w:src.w/src.h):AS[S.asp];return[S.cols,Math.max(2,Math.round(S.cols/A/S.ar))]}
+function sample(el,cols,rows){
+ const ss=cols>220?2:3,w=cols*ss,h=rows*ss,odd=S.rot%180;SC.width=w;SC.height=h;sx.clearRect(0,0,w,h);
+ let kx,ky;if(S.fit==='stretch'){kx=odd?h/src.w:w/src.w;ky=odd?w/src.h:h/src.h}else{kx=ky=(S.fit==='cover'?Math.max:Math.min)(w/(odd?src.h:src.w),h/(odd?src.w:src.h))}
+ sx.save();sx.translate(w/2+S.px*w/2,h/2+S.py*h/2);sx.rotate(S.rot*Math.PI/180);if(S.flip)sx.scale(-1,1);sx.scale(kx*S.zoom,ky*S.zoom);sx.drawImage(el,-src.w/2,-src.h/2,src.w,src.h);sx.restore();
+ const I=sx.getImageData(0,0,w,h).data,N=cols*rows,D=new Uint8ClampedArray(N*4),n=ss*ss,cf=(259*(S.con*2.55+255))/(255*(259-S.con*2.55)),b0=S.bri*2.55,sa=1+S.sat/100;
+ for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){let r=0,g=0,b=0,a=0;
+  for(let j=0;j<ss;j++)for(let i=0;i<ss;i++){const o=((y*ss+j)*w+x*ss+i)*4,al=I[o+3];r+=I[o]*al;g+=I[o+1]*al;b+=I[o+2]*al;a+=al}
+  if(a>0){r/=a;g/=a;b/=a}a/=n;r=(r-128)*cf+128+b0;g=(g-128)*cf+128+b0;b=(b-128)*cf+128+b0;const l=.299*r+.587*g+.114*b;r=l+(r-l)*sa;g=l+(g-l)*sa;b=l+(b-l)*sa;
+  if(S.inv){r=255-r;g=255-g;b=255-b}const q=(y*cols+x)*4;D[q]=r;D[q+1]=g;D[q+2]=b;D[q+3]=a}
+ if(S.edge>0){const L=new Float32Array(N);for(let i=0;i<N;i++)L[i]=.299*D[i*4]+.587*D[i*4+1]+.114*D[i*4+2];
+  for(let y=1;y<rows-1;y++)for(let x=1;x<cols-1;x++){const i=y*cols+x,gx=L[i-cols+1]+2*L[i+1]+L[i+cols+1]-L[i-cols-1]-2*L[i-1]-L[i+cols-1],gy=L[i+cols-1]+2*L[i+cols]+L[i+cols+1]-L[i-cols-1]-2*L[i-cols]-L[i-cols+1],m=Math.min(255,Math.hypot(gx,gy)*.7);for(let c=0;c<3;c++)D[i*4+c]+=(m-D[i*4+c])*S.edge}}
+ if(S.smooth>0&&prev&&prev.length===D.length){const s=S.smooth;for(let i=0;i<D.length;i++)D[i]=prev[i]*s+D[i]*(1-s)}prev=D.slice();
+ if(S.key!=='off'){const col=S.key==='color key';
+  if(col&&!S.keyc){const m=[[],[],[]],P=(x,y)=>{for(let c=0;c<3;c++)m[c].push(D[(y*cols+x)*4+c])};for(let x=0;x<cols;x++){P(x,0);P(x,rows-1)}for(let y=0;y<rows;y++){P(0,y);P(cols-1,y)}S.keyc=m.map(a=>a.sort((p,q)=>p-q)[a.length>>1])}
+  const kc=S.keyc,t=S.tol;for(let i=0;i<N;i++){const q=i*4;let d;if(col)d=(Math.hypot(D[q]-kc[0],D[q+1]-kc[1],D[q+2]-kc[2])-t*2.2)/18;else{const l=(.299*D[q]+.587*D[q+1]+.114*D[q+2])/255;d=S.key==='remove dark'?(l-t/100)*12:(1-t/100-l)*12}D[q+3]*=clamp(d,0,1)}}
+ return D}
+// ---------- playback / render ----------
+const cur=()=>{if(src.kind==='video')return src.el.currentTime;const n=performance.now();if(playing&&src.dur)tc=(tc+(n-lastN)/1000)%src.dur;lastN=n;return tc};
+const isPaused=()=>src.kind==='video'?src.el.paused:!playing;
+function setPlay(p){playing=p;if(src&&src.kind==='video')p?src.el.play():src.el.pause();$('pl').textContent=p?'⏸':'▶'}
+$('pl').onclick=()=>setPlay(isPaused());
+$('sk').oninput=e=>{if(!src||!src.dur)return;const t=e.target.value/1000*src.dur;if(src.kind==='video')src.el.currentTime=t;else tc=t;dirty=1};
+function render(el){drawOriginal(el);const[c,r]=grid(),D=sample(el,c,r),[W,H]=dims(c,r,S);if(out.width!==W||out.height!==H){out.width=W;out.height=H}draw(octx,D,c,r,S,W,H);curD=D}
+function tick(){requestAnimationFrame(tick);if(!src)return;const t=cur();if(!dirty&&(isPaused()||t===lt))return;if(src.kind==='video'&&src.el.readyState<2)return;lt=t;dirty=0;
+ try{render(src.get(t))}catch(e){stt('⚠ '+e.message)}
+ if(src.dur){$('sk').value=t/src.dur*1000;$('tm').textContent=t.toFixed(1)+' / '+src.dur.toFixed(1)+'s'}else $('tm').textContent='image'}
+requestAnimationFrame(tick);
+// ---------- export ----------
+const BK=['asp','fit','zoom','px','py','rot','flip','cols','ar','bri','con','sat','inv','edge','smooth','key','tol','keyc','nf','a','b'];
+async function bake(){if(S.b<=S.a)S.b=Math.min(1,S.a+.02);const sig=JSON.stringify(BK.map(k=>S[k]))+src.w+src.dur+src.kind;if(B&&B.sig===sig)return B;
+ const[cols,rows]=grid(),N=cols*rows*4,n=S.nf,f=new Uint8Array(N*n),v=src.kind==='video'?src.el:null,was=v&&!v.paused,started=performance.now();if(v)v.pause();prev=null;
+ for(let i=0;i<n;i++){if(exportCancelled)throw Error('Export cancelled.');const t=src.dur?src.dur*(S.a+(S.b-S.a)*i/n):0;f.set(sample(await src.frame(t),cols,rows),i*N);const done=i+1,eta=Math.max(0,(performance.now()-started)/done*(n-done)/1000);prog(done/n);stt(`Processing frame ${done} of ${n} · about ${eta.toFixed(1)}s remaining`);if(i%4===0)await new Promise(r=>setTimeout(r))}
+ prev=null;if(was)v.play();dirty=1;return B={sig,f,cols,rows,n}}
+async function pack(buf){let z=0,b=buf;if(window.CompressionStream){b=new Uint8Array(await new Response(new Blob([buf]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());z=1}
+ let s='';for(let i=0;i<b.length;i+=32768)s+=String.fromCharCode.apply(null,b.subarray(i,i+32768));return[btoa(s),z]}
+const dl=(blob,n)=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=n;a.click()};
+const sc=t=>'<scr'+'ipt>'+t+'</scr'+'ipt>';
+async function xHTML(){const b=await bake();stt('Compressing…');const[d,z]=await pack(b.f),M={cols:b.cols,rows:b.rows,n:b.n,fps:S.fps,pp:S.pp,z,S:{...S,keyc:null},d};
+ const player=`const M=${JSON.stringify(M)};(async()=>{let b=Uint8Array.from(atob(M.d),c=>c.charCodeAt(0));if(M.z)b=new Uint8Array(await new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+const c=document.getElementById('c'),x=c.getContext('2d'),[W,H]=dims(M.cols,M.rows,M.S),N=M.cols*M.rows*4;c.width=W;c.height=H;let p=0,tm=0,pt=performance.now(),last=-1;c.onclick=()=>p=!p;
+(function f(now){requestAnimationFrame(f);if(!p)tm+=now-pt;pt=now;const n=M.n,per=M.pp&&n>1?2*n-2:n;let i=Math.floor(tm/1000*M.fps)%per;if(i>=n)i=per-i;if(i!==last){last=i;draw(x,b.subarray(i*N,(i+1)*N),M.cols,M.rows,M.S,W,H)}})(pt)})();`;
+ const standaloneCore=coreSource.replace(/export\s*\{[^}]+\};?/,'');
+ const html='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Glyphmix</title><style>html,body{margin:0;height:100%;overflow:hidden;background:'+S.bg+'}canvas{display:block;width:100vw;height:100vh;object-fit:'+(S.cov?'cover':'contain')+'}</style></head><body><canvas id="c"></canvas>'+sc(standaloneCore)+sc(player)+'</body></html>';
+ dl(new Blob([html],{type:'text/html'}),'glyphmix.html');stt(`Exported ${(html.length/1048576).toFixed(2)} MB — open it in any browser.`)}
+async function xWebm(){const b=await bake(),[W,H]=dims(b.cols,b.rows,S),c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d'),ch=[],N=b.cols*b.rows*4,
+ rec=new MediaRecorder(c.captureStream(S.fps),{mimeType:MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm',videoBitsPerSecond:12e6});rec.ondataavailable=e=>ch.push(e.data);const done=new Promise(r=>rec.onstop=r);rec.start();
+ for(let i=0;i<b.n;i++){draw(x,b.f.subarray(i*N,(i+1)*N),b.cols,b.rows,S,W,H);prog((i+1)/b.n);await new Promise(r=>setTimeout(r,1000/S.fps))}rec.stop();await done;dl(new Blob(ch,{type:'video/webm'}),'glyphmix.webm');stt('WebM saved.')}
+const run=f=>async()=>{if(!src)return;exportCancelled=false;$('cancelExport').hidden=false;const bs=['xh','xw','xp'].map($);bs.forEach(b=>b.disabled=1);try{await f()}catch(e){stt('⚠ '+e.message)}bs.forEach(b=>b.disabled=0);$('cancelExport').hidden=true;prog(0)};
+$('xh').onclick=run(()=>{stt('Processing frames…');return xHTML()});$('xw').onclick=run(()=>{stt('Processing + recording…');return xWebm()});
+$('xp').onclick=run(async()=>out.toBlob(b=>dl(b,'glyphmix.png')));
+// ---------- file input / drag & drop ----------
+$('open').onclick=()=>$('file').click();$('file').onchange=e=>e.target.files[0]&&load(e.target.files[0]);$('demo').onclick=()=>{use(demoSrc());setPlay(true)};
+['dragenter','dragover'].forEach(t=>addEventListener(t,e=>{e.preventDefault();document.body.classList.add('dg')}));
+['dragleave','drop'].forEach(t=>addEventListener(t,e=>{e.preventDefault();if(t==='drop'||!e.relatedTarget){document.body.classList.remove('dg');if(t==='drop'&&e.dataTransfer.files[0])load(e.dataTransfer.files[0])}}));
+
+// ---------- editor ergonomics, persistence, accessibility ----------
+const SETTINGS_KEY='glyphmix.settings.v1',PRESETS_KEY='glyphmix.presets.v1';
+const history=[],future=[];let lastState='';
+const snapshot=()=>JSON.stringify({...S,keyc:null,st:[...S.st]});
+function updateHistoryButtons(){$('undo').disabled=!history.length;$('redo').disabled=!future.length}
+function recordState(){const next=snapshot();if(lastState&&next!==lastState){history.push(lastState);if(history.length>50)history.shift();future.length=0}lastState=next;updateHistoryButtons();try{localStorage.setItem(SETTINGS_KEY,next)}catch{stt('Settings could not be saved in this browser.')}}
+function loadSettings(){try{return JSON.parse(localStorage.getItem(SETTINGS_KEY))}catch{return null}}
+function disposeSource(){if(sourceUrl){URL.revokeObjectURL(sourceUrl);sourceUrl=null}if(src?.frames)for(const f of src.frames)f.bmp?.close?.()}
+function drawOriginal(el){const c=$('original');if(c.hidden)return;const max=1000,scale=Math.min(1,max/Math.max(src.w,src.h));c.width=Math.max(1,Math.round(src.w*scale));c.height=Math.max(1,Math.round(src.h*scale));const x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);x.drawImage(el,0,0,c.width,c.height)}
+function updateEstimate(){if(!src)return;const [c,r]=grid(),bytes=c*r*4*S.nf;$('estimate').textContent=`~${(bytes/1048576).toFixed(1)} MB working memory`}
+function setPreviewMode(original){$('original').hidden=!original;out.hidden=original;$('viewOriginal').setAttribute('aria-pressed',String(original));$('viewEffect').setAttribute('aria-pressed',String(!original));dirty=1}
+function renderCustomPresets(){document.querySelectorAll('[data-custom-preset]').forEach(e=>e.remove());let saved={};try{saved=JSON.parse(localStorage.getItem(PRESETS_KEY)||'{}')}catch{saved={}}for(const [name,value] of Object.entries(saved)){const b=document.createElement('button');b.type='button';b.textContent=name;b.dataset.customPreset='';b.title='Custom preset';b.onclick=()=>setVals(value);$('pre').appendChild(b)}}
+function addPresetControls(){const details=document.createElement('details');details.innerHTML='<summary>Custom presets</summary><div class="row"><button type="button" id="savePreset">Save current</button><button type="button" id="clearPresets">Clear saved</button></div>';$('ctl').appendChild(details);details.querySelector('#savePreset').onclick=()=>{const name=prompt('Preset name');if(!name?.trim())return;let saved={};try{saved=JSON.parse(localStorage.getItem(PRESETS_KEY)||'{}')}catch{saved={}}saved[name.trim().slice(0,30)]={...S,keyc:null};localStorage.setItem(PRESETS_KEY,JSON.stringify(saved));renderCustomPresets();stt(`Saved preset “${name.trim().slice(0,30)}”.`)};details.querySelector('#clearPresets').onclick=()=>{localStorage.removeItem(PRESETS_KEY);renderCustomPresets();stt('Custom presets cleared.')}}
+function initializeEnhancements(){
+ addPresetControls();renderCustomPresets();
+ $('undo').onclick=()=>{if(!history.length)return;future.push(snapshot());const raw=history.pop();lastState=raw;setVals(JSON.parse(raw));updateHistoryButtons()};
+ $('redo').onclick=()=>{if(!future.length)return;history.push(snapshot());const raw=future.pop();lastState=raw;setVals(JSON.parse(raw));updateHistoryButtons()};
+ $('reset').onclick=()=>{setVals(PR['Classic ASCII']);recordState();stt('Settings reset.')};
+ $('ctl').addEventListener('change',()=>{recordState();updateEstimate()});
+ $('pre').addEventListener('click',()=>queueMicrotask(()=>{recordState();updateEstimate()}));
+ $('cancelExport').onclick=()=>{exportCancelled=true;stt('Cancelling export…')};
+ $('viewOriginal').onclick=()=>setPreviewMode(true);$('viewEffect').onclick=()=>setPreviewMode(false);
+ $('previewZoom').oninput=e=>{const value=Number(e.target.value);$('previewZoomValue').value=value+'%';$('stage').style.setProperty('--preview-scale',value/100)};
+ $('helpButton').onclick=()=>$('helpDialog').showModal();
+ $('stage').onkeydown=e=>{if(e.code==='Space'){e.preventDefault();setPlay(isPaused())}};
+ addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName))return;if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?$('redo').click():$('undo').click()}else if(e.key.toLowerCase()==='o'){e.preventDefault();$('file').click()}});
+ if(!window.MediaRecorder||!HTMLCanvasElement.prototype.captureStream){$('xw').disabled=true;$('xw').title='WebM recording is not supported by this browser'}
+ addEventListener('beforeunload',disposeSource);
+ setInterval(updateEstimate,1500);
+}
+
+initializeEnhancements();use(demoSrc());setVals(loadSettings()||PR['Classic ASCII']);recordState();

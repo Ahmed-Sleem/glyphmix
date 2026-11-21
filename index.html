@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="description" content="Turn videos, GIFs, and images into animated ASCII, dither, halftone, and pixel art—entirely in your browser.">
+  <meta name="theme-color" content="#f7f6f2">
+  <title>Glyphmix — Video to ASCII & Pixel Art</title>
+  <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#stage">Skip to preview</a>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="Glyphmix home"><span aria-hidden="true">▚</span> Glyphmix</a>
+    <nav class="presets" id="pre" aria-label="Built-in presets"></nav>
+    <div class="header-actions">
+      <button id="demo" class="button button-quiet" type="button">Demo</button>
+      <button id="helpButton" class="icon-button" type="button" aria-label="Open help" title="Help and shortcuts">?</button>
+      <button class="button button-primary" id="open" type="button">Open media</button>
+      <input type="file" id="file" accept="video/*,image/*,.gif" hidden aria-label="Choose a video, GIF, or image">
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="sidebar" aria-label="Editor controls">
+      <div class="history-bar" aria-label="Editing history">
+        <button id="undo" type="button" title="Undo (Ctrl or Command + Z)" disabled>↶ Undo</button>
+        <button id="redo" type="button" title="Redo (Ctrl or Command + Shift + Z)" disabled>↷ Redo</button>
+        <button id="reset" type="button" title="Reset all settings">Reset</button>
+      </div>
+      <div id="ctl" class="controls"></div>
+      <section class="export-panel" aria-labelledby="exportTitle">
+        <div class="export-heading"><h2 id="exportTitle">Export</h2><span id="estimate">Estimate unavailable</span></div>
+        <div id="bar" class="progress" role="progressbar" aria-label="Export progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+        <div id="stt" class="status" role="status" aria-live="polite">Drop a video, GIF, or image anywhere.</div>
+        <button class="button button-primary button-wide" id="xh" type="button">Export standalone HTML</button>
+        <div class="button-row"><button id="xw" type="button">Record WebM</button><button id="xp" type="button">PNG frame</button></div>
+        <button id="cancelExport" class="button button-danger button-wide" type="button" hidden>Cancel export</button>
+      </section>
+    </aside>
+
+    <section class="preview-shell" aria-label="Preview and playback">
+      <div class="preview-tools">
+        <div class="segmented" aria-label="Preview mode">
+          <button id="viewEffect" type="button" aria-pressed="true">Effect</button>
+          <button id="viewOriginal" type="button" aria-pressed="false">Original</button>
+        </div>
+        <label class="zoom-control">Preview zoom <input id="previewZoom" type="range" min="25" max="200" value="100" step="5"><output id="previewZoomValue">100%</output></label>
+      </div>
+      <div id="stage" class="stage" tabindex="0" aria-label="Rendered media preview. Press Space to play or pause.">
+        <canvas id="out" aria-label="Processed media output"></canvas>
+        <canvas id="original" aria-label="Original media preview" hidden></canvas>
+        <div id="emptyState" class="empty-state" hidden>
+          <strong>Drop media here</strong><span>or use Open media above</span>
+        </div>
+      </div>
+      <div id="tb" class="transport">
+        <button id="pl" class="icon-button" type="button" aria-label="Pause preview">⏸</button>
+        <label class="scrubber"><span class="sr-only">Playback position</span><input type="range" id="sk" min="0" max="1000" value="0"></label>
+        <span id="tm" class="time" aria-live="off">0:00</span>
+      </div>
+      <div id="drop" class="drop-overlay" aria-hidden="true">Drop to convert</div>
+    </section>
+  </main>
+
+  <dialog id="helpDialog" aria-labelledby="helpTitle">
+    <form method="dialog">
+      <div class="dialog-head"><h2 id="helpTitle">Glyphmix help</h2><button class="icon-button" aria-label="Close help">×</button></div>
+      <p>Everything runs locally in your browser. Your media is never uploaded.</p>
+      <h3>Shortcuts</h3>
+      <dl class="shortcuts"><div><dt>Space</dt><dd>Play or pause</dd></div><div><dt>Ctrl/⌘ Z</dt><dd>Undo</dd></div><div><dt>Ctrl/⌘ Shift Z</dt><dd>Redo</dd></div><div><dt>O</dt><dd>Open media</dd></div></dl>
+      <h3>Browser support</h3><p>PNG and standalone HTML work in modern browsers. WebM recording depends on MediaRecorder support. Animated GIF decoding uses WebCodecs when available and a local fallback otherwise.</p>
+    </form>
+  </dialog>
+  <script type="module" src="/src/app.js"></script>
+</body>
+</html>
