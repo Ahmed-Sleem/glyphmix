@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-21 session 2
+
+- Reorganized settings into clear progressive groups and a visual style list.
+- Replaced conflicting cell-size/resolution controls with one Detail control.
+- Added one format-aware Export window containing animated DOM-text HTML, canvas HTML, TXT frame, TXT sequence, PNG, and WebM outputs.
+- Added pure selectable animated text playback without canvas, GIF, or video.
+- Added unit and desktop/mobile download validation; pushed and verified GitHub Pages deployment.
+
 ## 2026-11-21 session 1
 
 - Rebuilt Glyphmix as a modular Vite application with a polished responsive light interface.
