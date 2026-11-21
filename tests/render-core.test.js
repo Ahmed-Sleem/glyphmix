@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clamp, dims, getDitherMatrix, h2r } from '../src/render-core.js';
+import { clamp, dims, getDitherMatrix, h2r, toTextFrame } from '../src/render-core.js';
 
 describe('render core invariants', () => {
   it('clamps values to the requested inclusive range', () => {
@@ -20,5 +20,16 @@ describe('render core invariants', () => {
     const matrix = getDitherMatrix(4);
     expect(matrix).toHaveLength(4);
     expect(matrix.flat().sort((a, b) => a - b)).toEqual([...Array(16).keys()]);
+  });
+
+  it('converts processed pixels into deterministic real text', () => {
+    const pixels = new Uint8Array([
+      0, 0, 0, 255,
+      255, 255, 255, 255,
+      128, 128, 128, 255,
+      255, 255, 255, 0
+    ]);
+    const settings = { cs: 'binary', custom: '', ink: 1, lo: 0, hi: 1, gm: 1 };
+    expect(toTextFrame(pixels, 2, 2, settings)).toBe(' 1\n0');
   });
 });

@@ -2,6 +2,8 @@
 
 Turn videos, GIFs, and images into animated ASCII, dither, halftone, tile, and pixel art directly in your browser. Media stays on your device.
 
+Glyphmix exports selectable animated-text HTML, high-fidelity canvas HTML, plain-text frames and sequences, PNG images, and WebM video from one format-aware export window.
+
 **Live:** https://ahmed-sleem.github.io/glyphmix/
 
 ## Run locally

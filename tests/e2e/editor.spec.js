@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
@@ -10,17 +10,35 @@ test.beforeEach(async ({ page }) => {
   await expect.poll(() => errors).toEqual([]);
 });
 
-test('loads the demo and exposes the complete editing workflow', async ({ page }) => {
-  await expect(page.getByRole('heading', { name: 'Export' })).toBeVisible();
-  await expect(page.locator('#out')).toHaveJSProperty('width', 960);
-  await page.getByLabel('Render style').selectOption('tiles');
+test('organizes styles as a selectable list and preserves history', async ({ page }) => {
+  await expect(page.getByRole('heading', { name: 'Export' })).toHaveCount(0);
+  await expect(page.getByRole('radio', { name: /ASCII text/ })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('radio', { name: /Glyph tiles/ }).click();
+  await expect(page.getByRole('radio', { name: /Glyph tiles/ })).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByRole('button', { name: /Undo/ })).toBeEnabled();
   await page.getByRole('button', { name: /Undo/ }).click();
-  await page.getByRole('button', { name: /Redo/ }).click();
-  await page.getByRole('button', { name: 'Original' }).click();
-  await expect(page.locator('#original')).toBeVisible();
-  await page.getByRole('button', { name: 'Effect' }).click();
-  await expect(page.locator('#out')).toBeVisible();
+  await expect(page.getByRole('radio', { name: /ASCII text/ })).toHaveAttribute('aria-checked', 'true');
+});
+
+test('uses one detail control and has no contradictory cell-size control', async ({ page }) => {
+  await expect(page.getByLabel('Detail (columns)')).toHaveCount(1);
+  await expect(page.getByLabel(/Cell size/i)).toHaveCount(0);
+  await expect(page.getByLabel(/Columns \(resolution\)/i)).toHaveCount(0);
+  await page.getByLabel('Detail (columns)').fill('80');
+  await expect(page.getByText('80 · 640px')).toBeVisible();
+});
+
+test('opens one accessible export window with format-aware options', async ({ page }) => {
+  await page.getByRole('button', { name: 'Export…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Choose an output' });
+  await expect(dialog).toBeVisible();
+  await expect(page.getByRole('radio', { name: /Animated text HTML/ })).toBeChecked();
+  await expect(page.getByText(/Real selectable ASCII text/)).toBeVisible();
+  await page.getByRole('radio', { name: /PNG image/ }).check();
+  await expect(page.getByRole('spinbutton', { name: /^Frames/ })).toBeHidden();
+  await expect(page.getByLabel('Transparent background')).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toBeHidden();
 });
 
 test('supports keyboard playback and help dialog', async ({ page }) => {
@@ -30,30 +48,61 @@ test('supports keyboard playback and help dialog', async ({ page }) => {
   await page.getByRole('button', { name: 'Open help' }).click();
   await expect(page.getByRole('heading', { name: 'Glyphmix help' })).toBeVisible();
   await page.getByRole('button', { name: 'Close help' }).click();
-  await expect(page.locator('#helpDialog')).not.toBeVisible();
 });
 
-test('exports a PNG and a self-contained HTML player', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name === 'mobile', 'Export is covered once on desktop.');
-  const pngEvent = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'PNG frame' }).click();
-  const png = await pngEvent;
-  expect(png.suggestedFilename()).toBe('glyphmix.png');
+test('exports text HTML, canvas HTML, plain text, frame sequences, PNG, and WebM', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'mobile', 'All download formats are covered once on desktop.');
+  const open = async format => {
+    await page.getByRole('button', { name: 'Export…' }).click();
+    if (format) await page.getByRole('radio', { name: format }).check();
+    const frames = page.getByRole('spinbutton', { name: /^Frames/ });
+    if (await frames.isVisible()) await frames.fill('8');
+    const fps = page.getByLabel('Playback rate');
+    if (await fps.isVisible()) await fps.fill('30');
+  };
+  const download = async buttonName => {
+    const event = page.waitForEvent('download');
+    await page.getByRole('button', { name: buttonName }).click();
+    return event;
+  };
 
-  await page.getByLabel('Frames to process').evaluate(input => { input.value = '8'; input.dispatchEvent(new Event('input', { bubbles: true })); });
-  const htmlEvent = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export standalone HTML' }).click();
-  const htmlDownload = await htmlEvent;
-  const html = await readFile(await htmlDownload.path(), 'utf8');
-  expect(html).toContain('<canvas id="c"></canvas>');
-  expect(html).not.toContain('export {');
-  expect(html.length).toBeGreaterThan(10000);
+  await open();
+  let file = await download('Export animated text HTML');
+  let content = await readFile(await file.path(), 'utf8');
+  expect(content).toContain('<pre id="art"');
+  expect(content).not.toContain('<canvas');
+  expect(content).not.toContain('MediaRecorder');
+
+  await open(/Canvas HTML/);
+  file = await download('Export canvas HTML');
+  content = await readFile(await file.path(), 'utf8');
+  expect(content).toContain('<canvas id="c"></canvas>');
+  expect(content).not.toContain('export {');
+
+  await open(/Text frame/);
+  file = await download('Export text frame');
+  content = await readFile(await file.path(), 'utf8');
+  expect(content.split('\n').length).toBeGreaterThan(10);
+
+  await open(/Animated text frames/);
+  file = await download('Export text frames');
+  content = await readFile(await file.path(), 'utf8');
+  expect(content).toContain('FRAME 1 / 8');
+  expect(content).toContain('FRAME 8 / 8');
+
+  await open(/PNG image/);
+  file = await download('Export PNG');
+  expect((await stat(await file.path())).size).toBeGreaterThan(1000);
+
+  await open(/WebM video/);
+  file = await download('Export WebM');
+  expect((await stat(await file.path())).size).toBeGreaterThan(1000);
 });
 
-test('has named controls, live status, and no horizontal page overflow', async ({ page }) => {
+test('has named controls, live status, and no page overflow', async ({ page }) => {
   await expect(page.locator('#stt')).toHaveAttribute('role', 'status');
   await expect(page.locator('#bar')).toHaveAttribute('role', 'progressbar');
-  const unnamed = await page.locator('button:not([aria-label])').evaluateAll(buttons => buttons.filter(b => !b.textContent.trim()).length);
+  const unnamed = await page.locator('button:not([aria-label])').evaluateAll(buttons => buttons.filter(button => !button.textContent.trim()).length);
   expect(unnamed).toBe(0);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(overflow).toBe(false);

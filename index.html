@@ -29,13 +29,10 @@
         <button id="reset" type="button" title="Reset all settings">Reset</button>
       </div>
       <div id="ctl" class="controls"></div>
-      <section class="export-panel" aria-labelledby="exportTitle">
-        <div class="export-heading"><h2 id="exportTitle">Export</h2><span id="estimate">Estimate unavailable</span></div>
+      <section class="export-panel" aria-label="Status and export">
         <div id="bar" class="progress" role="progressbar" aria-label="Export progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
         <div id="stt" class="status" role="status" aria-live="polite">Drop a video, GIF, or image anywhere.</div>
-        <button class="button button-primary button-wide" id="xh" type="button">Export standalone HTML</button>
-        <div class="button-row"><button id="xw" type="button">Record WebM</button><button id="xp" type="button">PNG frame</button></div>
-        <button id="cancelExport" class="button button-danger button-wide" type="button" hidden>Cancel export</button>
+        <button class="button button-primary button-wide export-trigger" id="exportButton" type="button">Export…</button>
       </section>
     </aside>
 
@@ -63,13 +60,44 @@
     </section>
   </main>
 
+  <dialog id="exportDialog" class="export-dialog" aria-labelledby="exportDialogTitle">
+    <form method="dialog" id="exportForm">
+      <div class="dialog-head"><div><span class="eyebrow">Export</span><h2 id="exportDialogTitle">Choose an output</h2></div><button class="icon-button" value="cancel" aria-label="Close export window">×</button></div>
+      <div class="export-dialog-layout">
+        <fieldset class="format-list" id="formatList"><legend class="sr-only">Export format</legend>
+          <label class="format-card"><input type="radio" name="exportFormat" value="text-html" checked><span><strong>Animated text HTML</strong><small>Selectable ASCII text in a standalone page. No canvas or video.</small></span><b>.html</b></label>
+          <label class="format-card"><input type="radio" name="exportFormat" value="canvas-html"><span><strong>Canvas HTML</strong><small>Standalone animated page with full visual fidelity.</small></span><b>.html</b></label>
+          <label class="format-card"><input type="radio" name="exportFormat" value="text"><span><strong>Text frame</strong><small>The current view as plain, copyable ASCII text.</small></span><b>.txt</b></label>
+          <label class="format-card"><input type="radio" name="exportFormat" value="text-sequence"><span><strong>Animated text frames</strong><small>Every processed frame in one timestamped text file.</small></span><b>.txt</b></label>
+          <label class="format-card"><input type="radio" name="exportFormat" value="png"><span><strong>PNG image</strong><small>A lossless still image of the current frame.</small></span><b>.png</b></label>
+          <label class="format-card"><input type="radio" name="exportFormat" value="webm"><span><strong>WebM video</strong><small>Rendered animation for sharing and editing.</small></span><b>.webm</b></label>
+        </fieldset>
+        <section class="export-options" aria-labelledby="exportOptionsTitle">
+          <div><h3 id="exportOptionsTitle">Options</h3><p id="formatHint">Real text stays selectable and scales sharply at any size.</p></div>
+          <label data-export-option="animated">Frames <span><input id="exportFrames" type="number" min="8" max="240" step="1" value="48"><small>8–240</small></span></label>
+          <label data-export-option="animated">Playback rate <span><input id="exportFps" type="number" min="4" max="30" step="1" value="12"><small>fps</small></span></label>
+          <div class="split-options" data-export-option="animated">
+            <label>Clip start <span><input id="exportStart" type="number" min="0" max="100" step="1" value="0"><small>%</small></span></label>
+            <label>Clip end <span><input id="exportEnd" type="number" min="0" max="100" step="1" value="100"><small>%</small></span></label>
+          </div>
+          <label class="check-option" data-export-option="animated"><input id="exportPingPong" type="checkbox"><span><strong>Ping-pong loop</strong><small>Play forward, then backward.</small></span></label>
+          <label class="check-option" data-export-option="canvas"><input id="exportCover" type="checkbox"><span><strong>Fill browser window</strong><small>Crop to cover instead of fitting inside.</small></span></label>
+          <label class="check-option" data-export-option="visual"><input id="exportTransparent" type="checkbox"><span><strong>Transparent background</strong><small>Supported by PNG and canvas-based output.</small></span></label>
+          <div class="export-summary"><span id="estimate">Estimate unavailable</span><span id="exportCompatibility"></span></div>
+        </section>
+      </div>
+      <div class="dialog-actions"><button type="button" id="cancelExport" class="button button-danger" hidden>Cancel processing</button><button value="cancel">Cancel</button><button type="button" id="confirmExport" class="button button-primary">Export animated text HTML</button></div>
+    </form>
+  </dialog>
+
   <dialog id="helpDialog" aria-labelledby="helpTitle">
     <form method="dialog">
       <div class="dialog-head"><h2 id="helpTitle">Glyphmix help</h2><button class="icon-button" aria-label="Close help">×</button></div>
       <p>Everything runs locally in your browser. Your media is never uploaded.</p>
       <h3>Shortcuts</h3>
       <dl class="shortcuts"><div><dt>Space</dt><dd>Play or pause</dd></div><div><dt>Ctrl/⌘ Z</dt><dd>Undo</dd></div><div><dt>Ctrl/⌘ Shift Z</dt><dd>Redo</dd></div><div><dt>O</dt><dd>Open media</dd></div></dl>
-      <h3>Browser support</h3><p>PNG and standalone HTML work in modern browsers. WebM recording depends on MediaRecorder support. Animated GIF decoding uses WebCodecs when available and a local fallback otherwise.</p>
+      <h3>Export formats</h3><p>Animated text HTML uses real selectable text with no canvas or video. Canvas HTML preserves every visual style. Plain text, text sequences, PNG, and WebM are also available from the Export window.</p>
+      <h3>Browser support</h3><p>HTML, text, and PNG export work in modern browsers. WebM recording depends on MediaRecorder support. Animated GIF decoding uses WebCodecs when available and a local fallback otherwise.</p>
     </form>
   </dialog>
   <script type="module" src="/src/app.js"></script>

@@ -30,4 +30,10 @@ function draw(ctx,D,cols,rows,S,W,H){
  else{const g=S.gap;for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const i=y*cols+x;if(V[i]<0)continue;ctx.fillStyle=col(i);ctx.fillRect(x*cw+g,y*ch+g,cw-2*g,ch-2*g)}}
 }
 
-export { clamp, dims, draw, RAMPS, PALS, h2r, bay as getDitherMatrix };
+function toTextFrame(data,cols,rows,settings){
+ const ramp=RAMPS[settings.cs]||settings.custom||' .#',last=ramp.length-1,hi=Math.max(settings.lo+.01,settings.hi),lines=[];
+ for(let y=0;y<rows;y++){let line='';for(let x=0;x<cols;x++){const i=(y*cols+x)*4;if(data[i+3]<100){line+=' ';continue}let l=(.299*data[i]+.587*data[i+1]+.114*data[i+2])/255;if(!settings.ink)l=1-l;const v=Math.pow(clamp((l-settings.lo)/(hi-settings.lo),0,1),settings.gm);line+=ramp[Math.round(v*last)]}lines.push(line.replace(/\s+$/,''))}
+ return lines.join('\n');
+}
+
+export { clamp, dims, draw, RAMPS, PALS, h2r, toTextFrame, bay as getDitherMatrix };
