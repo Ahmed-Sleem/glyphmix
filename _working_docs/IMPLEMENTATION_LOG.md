@@ -1,5 +1,14 @@
 # Implementation Log
 
+## GM-003 — Adaptive presets, favicon, and release readiness
+
+- Files touched: `favicon.svg`, `index.html`, `README.md`, `src/app.js`, `src/styles.css`, and browser tests.
+- Changes: added a bundled brand favicon; shortened the README opening and placed the live URL directly after it; made every sidebar group collapsed initially; moved Terminal, Koi tiles, 1-bit dither, Halftone print, Pixel mosaic, Cyber blocks, Gameboy, and Amber CRT into the first accessible Presets section; added accurate active-preset state; replaced manual preview zoom with ResizeObserver-driven automatic fit.
+- Responsive proof: tested 320×568, 768×500, 1024×600, 1440×700, standard desktop, and mobile project sizes with no viewport overflow or cropped primary regions.
+- Verification: `npm run verify` passed with 5 unit tests and 16 browser checks (two intentionally duplicate mobile batches skipped). Controlled faults for collapsed groups, preset completeness, preview fit, and favicon were observed failing before restoration.
+- Deployment: GitHub Actions run 44958242888 succeeded. Live desktop, narrow mobile, and short landscape checks returned HTTP 200, all eight groups were collapsed, Presets was first, preview fit was true, and there were no console errors. The built favicon asset returned HTTP 200 as `image/svg+xml`.
+- Self-check: complete, pushed, deployed, and production-ready.
+
 ## GM-002 — Organized settings and unified export workflow
 
 - Files touched: `index.html`, `src/app.js`, `src/render-core.js`, `src/styles.css`, tests, README, and Vite preview configuration.

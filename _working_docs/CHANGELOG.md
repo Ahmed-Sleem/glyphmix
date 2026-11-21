@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-21 session 3
+
+- Added a branded SVG favicon and minimal README introduction with immediate live URL.
+- Moved all built-in presets into the first sidebar section and made every settings section collapsed by default.
+- Replaced manual preview zoom with automatic container fitting.
+- Verified adaptive layout across desktop, narrow mobile, tablet/landscape, and short viewports; pushed and deployed successfully.
+
 ## 2026-11-21 session 2
 
 - Reorganized settings into clear progressive groups and a visual style list.
