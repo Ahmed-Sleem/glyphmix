@@ -51,6 +51,12 @@
         <div id="emptyState" class="empty-state" hidden>
           <strong>Drop media here</strong><span>or use Open media above</span>
         </div>
+        <div id="busyOverlay" class="busy-overlay" role="status" aria-live="polite" aria-atomic="true" hidden>
+          <span class="busy-spinner" aria-hidden="true"></span>
+          <span class="busy-copy"><strong id="busyTitle">Processing…</strong><span id="busyDetail">Preparing your media</span></span>
+          <time id="busyTime">0.0s</time>
+          <button id="busyCancel" type="button" hidden>Cancel</button>
+        </div>
       </div>
       <div id="tb" class="transport">
         <button id="pl" class="icon-button" type="button" aria-label="Pause preview">⏸</button>

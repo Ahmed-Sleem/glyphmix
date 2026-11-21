@@ -54,6 +54,30 @@ test('opens one accessible export window with format-aware options', async ({ pa
   await expect(dialog).toBeHidden();
 });
 
+test('shows explicit timed feedback for expensive preview and export processing', async ({ page }, testInfo) => {
+  await page.getByText('Detail', { exact: true }).click();
+  await page.getByLabel('Detail (columns)').fill('180');
+  await expect(page.locator('#busyOverlay')).toBeVisible();
+  await expect(page.locator('#busyTitle')).toHaveText('Updating preview');
+  await expect(page.locator('#stage')).toHaveAttribute('aria-busy', 'true');
+  await expect(page.locator('#busyOverlay')).toBeHidden();
+
+  test.skip(testInfo.project.name !== 'desktop', 'Timed recording is covered once.');
+  await page.getByRole('button', { name: 'Export…' }).click();
+  await page.getByRole('radio', { name: /WebM video/ }).check();
+  await page.getByRole('spinbutton', { name: /^Frames/ }).fill('8');
+  await page.getByLabel('Playback rate').fill('4');
+  const event = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export WebM' }).click();
+  await expect(page.locator('#busyOverlay')).toBeVisible();
+  await expect(page.locator('#busyTitle')).toContainText('Preparing WebM');
+  await expect(page.locator('#busyDetail')).toContainText(/Playback paused|Frame|Recording/);
+  await page.waitForTimeout(250);
+  await expect(page.locator('#busyTime')).not.toHaveText('0.0s');
+  await event;
+  await expect(page.locator('#busyOverlay')).toBeHidden();
+});
+
 test('supports keyboard playback and help dialog', async ({ page }) => {
   await page.locator('#stage').focus();
   await page.keyboard.press('Space');
