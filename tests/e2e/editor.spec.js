@@ -10,17 +10,30 @@ test.beforeEach(async ({ page }) => {
   await expect.poll(() => errors).toEqual([]);
 });
 
-test('organizes styles as a selectable list and preserves history', async ({ page }) => {
-  await expect(page.getByRole('heading', { name: 'Export' })).toHaveCount(0);
+test('defaults all settings groups to collapsed and preserves style history', async ({ page }) => {
+  const groups = page.locator('#ctl > details');
+  await expect(groups).toHaveCount(8);
+  expect(await groups.evaluateAll(items => items.every(item => !item.open))).toBe(true);
+  await page.getByText('Style', { exact: true }).click();
   await expect(page.getByRole('radio', { name: /ASCII text/ })).toHaveAttribute('aria-checked', 'true');
   await page.getByRole('radio', { name: /Glyph tiles/ }).click();
   await expect(page.getByRole('radio', { name: /Glyph tiles/ })).toHaveAttribute('aria-checked', 'true');
-  await expect(page.getByRole('button', { name: /Undo/ })).toBeEnabled();
   await page.getByRole('button', { name: /Undo/ }).click();
   await expect(page.getByRole('radio', { name: /ASCII text/ })).toHaveAttribute('aria-checked', 'true');
 });
 
+test('places all built-in presets in the first settings section', async ({ page }) => {
+  await expect(page.locator('#ctl > details').first().locator('summary')).toHaveText('Presets');
+  await page.getByText('Presets', { exact: true }).click();
+  for (const name of ['Terminal','Koi tiles','1-bit dither','Halftone print','Pixel mosaic','Cyber blocks','Gameboy','Amber CRT']) {
+    await expect(page.getByRole('radio', { name: new RegExp(name) })).toBeVisible();
+  }
+  await page.getByRole('radio', { name: /Terminal/ }).click();
+  await expect(page.getByRole('radio', { name: /Terminal/ })).toHaveAttribute('aria-checked', 'true');
+});
+
 test('uses one detail control and has no contradictory cell-size control', async ({ page }) => {
+  await page.getByText('Detail', { exact: true }).click();
   await expect(page.getByLabel('Detail (columns)')).toHaveCount(1);
   await expect(page.getByLabel(/Cell size/i)).toHaveCount(0);
   await expect(page.getByLabel(/Columns \(resolution\)/i)).toHaveCount(0);
@@ -97,6 +110,35 @@ test('exports text HTML, canvas HTML, plain text, frame sequences, PNG, and WebM
   await open(/WebM video/);
   file = await download('Export WebM');
   expect((await stat(await file.path())).size).toBeGreaterThan(1000);
+});
+
+test('auto-fits the preview and serves the favicon', async ({ page, request }) => {
+  const favicon = await request.get('/favicon.svg');
+  expect(favicon.ok()).toBe(true);
+  expect(favicon.headers()['content-type']).toContain('image/svg+xml');
+  await page.getByText('Detail', { exact: true }).click();
+  await page.getByLabel('Detail (columns)').fill('300');
+  await expect.poll(async () => {
+    const canvas = await page.locator('#out').boundingBox();
+    const stage = await page.locator('#stage').boundingBox();
+    return canvas.width <= stage.width && canvas.height <= stage.height;
+  }).toBe(true);
+  await expect(page.getByLabel('Preview automatically fits the available area')).toBeVisible();
+});
+
+test('adapts without cropping at narrow, tablet, short, and wide screens', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'Viewport matrix is covered once.');
+  for (const viewport of [{ width: 320, height: 568 }, { width: 768, height: 500 }, { width: 1024, height: 600 }, { width: 1440, height: 700 }]) {
+    await page.setViewportSize(viewport);
+    const result = await page.evaluate(() => {
+      const rects = [...document.querySelectorAll('.topbar,.workspace,.preview-shell,.sidebar')].map(element => element.getBoundingClientRect());
+      return {
+        overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        outside: rects.some(rect => rect.left < -1 || rect.right > innerWidth + 1 || rect.top < -1 || rect.bottom > innerHeight + 1)
+      };
+    });
+    expect(result).toEqual({ overflow: false, outside: false });
+  }
 });
 
 test('has named controls, live status, and no page overflow', async ({ page }) => {

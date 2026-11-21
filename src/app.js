@@ -37,19 +37,26 @@ const STYLE_OPTIONS=[
  {id:'halftone',name:'Halftone',desc:'Print-inspired variable dots',icon:'●'},
  {id:'blocks',name:'Pixel blocks',desc:'Clean mosaic cells',icon:'■'}
 ];
-(function(){const box=$('ctl'),style=document.createElement('fieldset');style.className='style-picker';style.innerHTML='<legend>Style</legend><div class="style-list" role="radiogroup" aria-label="Render style"></div>';box.appendChild(style);const list=style.querySelector('.style-list');
+const PRESET_ORDER=['Terminal','Koi tiles','1-bit dither','Halftone print','Pixel mosaic','Cyber blocks','Gameboy','Amber CRT'];
+const PRESET_META={Terminal:['>_','Green phosphor text'], 'Koi tiles':['鯉','Editorial colour tiles'], '1-bit dither':['░','High-detail monochrome'], 'Halftone print':['●','Printed dot pattern'], 'Pixel mosaic':['■','Source-colour blocks'], 'Cyber blocks':['▦','Neon block characters'], Gameboy:['▤','Four-tone handheld palette'], 'Amber CRT':['Aa','Warm terminal glow']};
+const sameValue=(a,b)=>Array.isArray(a)&&Array.isArray(b)?JSON.stringify(a)===JSON.stringify(b):a===b;
+const presetMatches=preset=>Object.entries(preset).every(([key,value])=>sameValue(S[key],value));
+function presetButton(name,preset,custom=false){const b=document.createElement('button'),meta=custom?['★','Saved preset']:PRESET_META[name];b.type='button';b.dataset.preset=name;b.dataset.customPreset=custom?'true':'false';b.setAttribute('role','radio');b.innerHTML=`<i aria-hidden="true">${meta[0]}</i><span><strong>${name}</strong><small>${meta[1]}</small></span><b aria-hidden="true">✓</b>`;b.onclick=()=>{setVals(preset);recordState()};return b}
+(function(){const box=$('ctl'),presets=document.createElement('details');presets.className='choice-section';presets.innerHTML='<summary>Presets</summary><div id="presetList" class="preset-list" role="radiogroup" aria-label="Built-in presets"></div>';box.appendChild(presets);const presetList=presets.querySelector('#presetList');for(const name of PRESET_ORDER)presetList.appendChild(presetButton(name,PR[name]));
+ UI.push(()=>presetList.querySelectorAll('[data-preset]').forEach(b=>{const preset=b.dataset.customPreset==='true'?JSON.parse(b.dataset.value):PR[b.dataset.preset];b.setAttribute('aria-checked',String(!!preset&&presetMatches(preset)))}));
+ const style=document.createElement('details');style.className='choice-section';style.innerHTML='<summary>Style</summary><div class="style-list" role="radiogroup" aria-label="Render style"></div>';box.appendChild(style);const list=style.querySelector('.style-list');
  for(const option of STYLE_OPTIONS){const b=document.createElement('button');b.type='button';b.dataset.style=option.id;b.setAttribute('role','radio');b.innerHTML=`<i aria-hidden="true">${option.icon}</i><span><strong>${option.name}</strong><small>${option.desc}</small></span><b aria-hidden="true">✓</b>`;b.onclick=()=>{S.style=option.id;dirty=1;prev=null;UI.forEach(f=>f());recordState()};list.appendChild(b)}
  UI.push(()=>list.querySelectorAll('button').forEach(b=>b.setAttribute('aria-checked',String(b.dataset.style===S.style))));
- const G={};for(const c of CT){if(!G[c[0]]){const d=G[c[0]]=document.createElement('details');d.open=['Canvas','Detail','Appearance'].includes(c[0]);d.innerHTML=`<summary>${c[0]}</summary>`;box.appendChild(d)}
+ const G={};for(const c of CT){if(!G[c[0]]){const d=G[c[0]]=document.createElement('details');d.open=false;d.innerHTML=`<summary>${c[0]}</summary>`;box.appendChild(d)}
   const el=document.createElement('label'),k=c[1],t=c[3],isn=typeof S[k]==='number';el.dataset.setting=k;el.innerHTML=`<span>${c[2]}<b></b></span>`;let i;
   if(t==='s'){i=document.createElement('select');i.setAttribute('aria-label',c[2]);c[4].forEach(o=>i.add(new Option(String(o).replaceAll('_',' '),o)))}else{i=document.createElement('input');i.type={r:'range',c:'checkbox',k:'color',t:'text'}[t];i.setAttribute('aria-label',c[2]);if(t==='r'){i.min=c[4];i.max=c[5];i.step=c[6]}}
   const sync=()=>{if(t==='c')i.checked=!!S[k];else i.value=S[k];if(t==='r')el.querySelector('b').textContent=k==='cols'?`${S[k]} · ${S[k]*8}px`:(+S[k]).toFixed(c[6]<1?2:0)};
-  i.oninput=()=>{S[k]=t==='c'?+i.checked:isn?+i.value:i.value;if(k==='pal')applyPal(i.value);if(k==='key'&&i.value!=='color key')S.keyc=null;prev=null;B=null;dirty=1;if(k==='pal')UI.forEach(f=>f());else sync()};
+  i.oninput=()=>{S[k]=t==='c'?+i.checked:isn?+i.value:i.value;if(k==='pal')applyPal(i.value);if(k==='key'&&i.value!=='color key')S.keyc=null;prev=null;B=null;dirty=1;if(k==='pal')UI.forEach(f=>f());else{sync();UI.forEach(f=>f())}};
   el.appendChild(i);G[c[0]].appendChild(el);UI.push(sync);sync()}
  const r=document.createElement('div');r.className='row';r.innerHTML='<button id="pk" type="button">Pick from preview</button><button id="au" type="button">Detect edges</button>';G['Background removal'].appendChild(r);
  $('pk').onclick=()=>{picking=1;out.style.cursor='crosshair';stt('Click the background colour in the preview.')};
  $('au').onclick=()=>{S.keyc=null;S.key='color key';UI.forEach(f=>f());prev=null;dirty=1};
- for(const n in PR){const b=document.createElement('button');b.type='button';b.textContent=n;b.onclick=()=>setVals(PR[n]);$('pre').appendChild(b)}UI.push(()=>{const visible={cs:['ascii','tiles'],custom:['ascii','tiles'],gap:['tiles','blocks'],hs:['halftone'],alg:['dither'],lv:['dither']};for(const [key,styles] of Object.entries(visible)){const row=box.querySelector(`[data-setting="${key}"]`);row.hidden=!styles.includes(S.style)}const tolerance=box.querySelector('[data-setting="tol"]');tolerance.hidden=S.key==='off'});UI.forEach(f=>f())})();
+ UI.push(()=>{const visible={cs:['ascii','tiles'],custom:['ascii','tiles'],gap:['tiles','blocks'],hs:['halftone'],alg:['dither'],lv:['dither']};for(const [key,styles] of Object.entries(visible)){const row=box.querySelector(`[data-setting="${key}"]`);row.hidden=!styles.includes(S.style)}const tolerance=box.querySelector('[data-setting="tol"]');tolerance.hidden=S.key==='off'});UI.forEach(f=>f())})();;
 out.onclick=e=>{if(!picking||!curD)return;const r=out.getBoundingClientRect(),[c,rw]=grid(),x=clamp(Math.floor((e.clientX-r.left)/r.width*c),0,c-1),y=clamp(Math.floor((e.clientY-r.top)/r.height*rw),0,rw-1),q=(y*c+x)*4;
  S.keyc=[curD[q],curD[q+1],curD[q+2]];S.key='color key';picking=0;out.style.cursor='';stt('Key colour set.');UI.forEach(f=>f());prev=null;dirty=1};
 // ---------- sources ----------
@@ -95,7 +102,8 @@ const isPaused=()=>src.kind==='video'?src.el.paused:!playing;
 function setPlay(p){playing=p;if(src&&src.kind==='video')p?src.el.play():src.el.pause();$('pl').textContent=p?'⏸':'▶'}
 $('pl').onclick=()=>setPlay(isPaused());
 $('sk').oninput=e=>{if(!src||!src.dur)return;const t=e.target.value/1000*src.dur;if(src.kind==='video')src.el.currentTime=t;else tc=t;dirty=1};
-function render(el){drawOriginal(el);const[c,r]=grid(),D=sample(el,c,r),[W,H]=dims(c,r,S);if(out.width!==W||out.height!==H){out.width=W;out.height=H}draw(octx,D,c,r,S,W,H);curD=D}
+function fitPreview(){const stage=$('stage'),canvas=out.hidden?$('original'):out;if(!canvas.width||!canvas.height)return;const css=getComputedStyle(stage),aw=Math.max(1,stage.clientWidth-parseFloat(css.paddingLeft)-parseFloat(css.paddingRight)),ah=Math.max(1,stage.clientHeight-parseFloat(css.paddingTop)-parseFloat(css.paddingBottom)),scale=Math.min(aw/canvas.width,ah/canvas.height);canvas.style.width=Math.floor(canvas.width*scale)+'px';canvas.style.height=Math.floor(canvas.height*scale)+'px'}
+function render(el){drawOriginal(el);const[c,r]=grid(),D=sample(el,c,r),[W,H]=dims(c,r,S);if(out.width!==W||out.height!==H){out.width=W;out.height=H}draw(octx,D,c,r,S,W,H);curD=D;fitPreview()}
 function tick(){requestAnimationFrame(tick);if(!src)return;const t=cur();if(!dirty&&(isPaused()||t===lt))return;if(src.kind==='video'&&src.el.readyState<2)return;lt=t;dirty=0;
  try{render(src.get(t))}catch(e){stt('⚠ '+e.message)}
  if(src.dur){$('sk').value=t/src.dur*1000;$('tm').textContent=t.toFixed(1)+' / '+src.dur.toFixed(1)+'s'}else $('tm').textContent='image'}
@@ -147,8 +155,8 @@ function loadSettings(){try{return JSON.parse(localStorage.getItem(SETTINGS_KEY)
 function disposeSource(){if(sourceUrl){URL.revokeObjectURL(sourceUrl);sourceUrl=null}if(src?.frames)for(const f of src.frames)f.bmp?.close?.()}
 function drawOriginal(el){const c=$('original');if(c.hidden)return;const max=1000,scale=Math.min(1,max/Math.max(src.w,src.h));c.width=Math.max(1,Math.round(src.w*scale));c.height=Math.max(1,Math.round(src.h*scale));const x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);x.drawImage(el,0,0,c.width,c.height)}
 function updateEstimate(){if(src&&$('exportDialog').open)syncExportState()}
-function setPreviewMode(original){$('original').hidden=!original;out.hidden=original;$('viewOriginal').setAttribute('aria-pressed',String(original));$('viewEffect').setAttribute('aria-pressed',String(!original));dirty=1}
-function renderCustomPresets(){document.querySelectorAll('[data-custom-preset]').forEach(e=>e.remove());let saved={};try{saved=JSON.parse(localStorage.getItem(PRESETS_KEY)||'{}')}catch{saved={}}for(const [name,value] of Object.entries(saved)){const b=document.createElement('button');b.type='button';b.textContent=name;b.dataset.customPreset='';b.title='Custom preset';b.onclick=()=>setVals(value);$('pre').appendChild(b)}}
+function setPreviewMode(original){$('original').hidden=!original;out.hidden=original;$('viewOriginal').setAttribute('aria-pressed',String(original));$('viewEffect').setAttribute('aria-pressed',String(!original));dirty=1;requestAnimationFrame(fitPreview)}
+function renderCustomPresets(){document.querySelectorAll('[data-custom-preset="true"]').forEach(e=>e.remove());let saved={};try{saved=JSON.parse(localStorage.getItem(PRESETS_KEY)||'{}')}catch{saved={}}for(const [name,value] of Object.entries(saved)){const b=presetButton(name,value,true);b.dataset.value=JSON.stringify(value);$('presetList').appendChild(b)}UI.forEach(f=>f())}
 function addPresetControls(){const details=document.createElement('details');details.innerHTML='<summary>Custom presets</summary><div class="row"><button type="button" id="savePreset">Save current</button><button type="button" id="clearPresets">Clear saved</button></div>';$('ctl').appendChild(details);details.querySelector('#savePreset').onclick=()=>{const name=prompt('Preset name');if(!name?.trim())return;let saved={};try{saved=JSON.parse(localStorage.getItem(PRESETS_KEY)||'{}')}catch{saved={}}saved[name.trim().slice(0,30)]={...S,keyc:null};localStorage.setItem(PRESETS_KEY,JSON.stringify(saved));renderCustomPresets();stt(`Saved preset “${name.trim().slice(0,30)}”.`)};details.querySelector('#clearPresets').onclick=()=>{localStorage.removeItem(PRESETS_KEY);renderCustomPresets();stt('Custom presets cleared.')}}
 function initializeEnhancements(){
  addPresetControls();renderCustomPresets();
@@ -156,17 +164,16 @@ function initializeEnhancements(){
  $('redo').onclick=()=>{if(!future.length)return;history.push(snapshot());const raw=future.pop();lastState=raw;setVals(JSON.parse(raw));updateHistoryButtons()};
  $('reset').onclick=()=>{setVals(PR['Classic ASCII']);recordState();stt('Settings reset.')};
  $('ctl').addEventListener('change',()=>{recordState();updateEstimate()});
- $('pre').addEventListener('click',()=>queueMicrotask(()=>{recordState();updateEstimate()}));
  $('exportButton').onclick=()=>{pushExportState();$('exportDialog').showModal()};
  $('formatList').onchange=syncExportState;['exportFrames','exportFps','exportStart','exportEnd'].forEach(id=>$(id).oninput=syncExportState);
  $('confirmExport').onclick=runSelectedExport;$('cancelExport').onclick=()=>{exportCancelled=true;stt('Cancelling export…')};
  $('viewOriginal').onclick=()=>setPreviewMode(true);$('viewEffect').onclick=()=>setPreviewMode(false);
- $('previewZoom').oninput=e=>{const value=Number(e.target.value);$('previewZoomValue').value=value+'%';$('stage').style.setProperty('--preview-scale',value/100)};
  $('helpButton').onclick=()=>$('helpDialog').showModal();
  $('stage').onkeydown=e=>{if(e.code==='Space'){e.preventDefault();setPlay(isPaused())}};
  addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName))return;if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?$('redo').click():$('undo').click()}else if(e.key.toLowerCase()==='o'){e.preventDefault();$('file').click()}});
  if(!window.MediaRecorder||!HTMLCanvasElement.prototype.captureStream){const webm=document.querySelector('input[name="exportFormat"][value="webm"]');webm.disabled=true;webm.closest('label').classList.add('is-disabled')}
- addEventListener('beforeunload',disposeSource);
+ const previewObserver=new ResizeObserver(()=>requestAnimationFrame(fitPreview));previewObserver.observe($('stage'));
+ addEventListener('beforeunload',()=>{previewObserver.disconnect();disposeSource()});
  setInterval(updateEstimate,1500);
 }
 
